@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write # needed to upload assets to the release
+
+jobs:
+  build:
+    runs-on: macos-latest
+    env:
+      CGO_ENABLED: "0"
+      VERSION: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Test before release
+        run: go test ./... -count=1
+
+      - name: Build macOS binaries
+        run: |
+          set -euo pipefail
+          LDFLAGS="-s -w -X github.com/bynov/mtga-collection-export/internal/version.String=${VERSION}"
+          mkdir -p dist build
+
+          GOOS=darwin GOARCH=arm64 go build -ldflags "$LDFLAGS" -o build/mtga-collection-export-arm64 ./cmd/mtga-collection-export
+          GOOS=darwin GOARCH=amd64 go build -ldflags "$LDFLAGS" -o build/mtga-collection-export-amd64 ./cmd/mtga-collection-export
+
+          # Universal binary so one download runs on Apple Silicon and Intel.
+          lipo -create -output build/mtga-collection-export-universal build/mtga-collection-export-arm64 build/mtga-collection-export-amd64
+
+          package() { # arch-label binary
+            local label="$1" bin="$2" dir="mtga-collection-export-${VERSION}-darwin-${label}"
+            mkdir -p "$dir"
+            cp "$bin" "$dir/mtga-collection-export"
+            cp README.md LICENSE "$dir/"
+            tar -czf "dist/${dir}.tar.gz" "$dir"
+          }
+          package arm64     build/mtga-collection-export-arm64
+          package amd64     build/mtga-collection-export-amd64
+          package universal build/mtga-collection-export-universal
+
+          cd dist && shasum -a 256 *.tar.gz > SHA256SUMS.txt
+          cat dist/SHA256SUMS.txt
+
+      - name: Upload assets to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${VERSION}" dist/*.tar.gz dist/SHA256SUMS.txt --clobber

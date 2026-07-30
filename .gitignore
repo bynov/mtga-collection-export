@@ -1,0 +1,4 @@
+/bin/
+*.core
+*.csv
+mtga_collection.csv
