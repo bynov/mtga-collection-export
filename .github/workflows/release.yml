@@ -37,7 +37,10 @@ jobs:
           lipo -create -output build/mtga-collection-export-universal build/mtga-collection-export-arm64 build/mtga-collection-export-amd64
 
           package() { # arch-label binary
-            local label="$1" bin="$2" dir="mtga-collection-export-${VERSION}-darwin-${label}"
+            # Two statements: macOS bash 3.2 expands the whole `local` command
+            # before assigning, so ${label} would be unset under `set -u`.
+            local label="$1" bin="$2"
+            local dir="mtga-collection-export-${VERSION}-darwin-${label}"
             mkdir -p "$dir"
             cp "$bin" "$dir/mtga-collection-export"
             cp README.md LICENSE "$dir/"
@@ -47,7 +50,7 @@ jobs:
           package amd64     build/mtga-collection-export-amd64
           package universal build/mtga-collection-export-universal
 
-          cd dist && shasum -a 256 *.tar.gz > SHA256SUMS.txt
+          (cd dist && shasum -a 256 *.tar.gz > SHA256SUMS.txt)
           cat dist/SHA256SUMS.txt
 
       - name: Upload assets to release
